@@ -1,5 +1,7 @@
 # RIG
 ## RIG Command Line Tools
+Download and add the RIG folder somewhere to your device.
+
 Add the "rig" command as an alias:
 
 First, open up the ```~/.bashrc``` file:
