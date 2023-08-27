@@ -229,7 +229,7 @@ class Data():
         for line in lines:
             line = line.split(",")
             self.labels.append(line[0])
-            line = Image.open("{rig_path}/{"{line[1]}"}")
+            line = Image.open(f"{rig_path}/{"{line[1]}"}")
             if grayscale == True:
                 line = ImageOps.grayscale(line)
             line = trim(np.array(line), img_dim, img_dim, grayscale)
