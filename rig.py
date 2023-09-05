@@ -20,7 +20,6 @@ def check_tracking():
         if key[:5] == ".rigs":
             tracking_key = key
             is_tracking = True
-            track_key = key
     
     tracked = []
     for bucket in os.listdir(rig_path):
@@ -51,6 +50,7 @@ def gimgurls(query, quantity=1):
     content = str(get(f'https://google.com/search?q={query}&tbm=isch').content)
     img_urls = []
     iterator = 0
+    quantity = int(quantity)
     while content.find("<a href") != -1 and iterator < quantity:
         index = content.find("<a h")
         content = content[index:]
@@ -62,11 +62,13 @@ def gimgurls(query, quantity=1):
         index = content.find('"')
         content = content[index+1:]
         index = content.find('"')
-        img_urls.append(content[:index])
+        url = content[:index]
+        if url != '':
+            img_urls.append(url)
         iterator += 1
     return img_urls
 
-def store(query, dir, quantity=1, value=None):
+def store(query, dir, quantity=1, label=None):
     '''
     This populates a folder "dir" with images from a search query.
     The number of images is the "quantity" argument,
@@ -74,6 +76,7 @@ def store(query, dir, quantity=1, value=None):
     file at "csv_path", and "value" is the value that serves as 
     an index to the keys in the csv file.
     '''
+    if label == None: label = 0
     if os.path.exists(f"{rig_path}/{dir}") == False:
         os.system(f"mkdir {rig_path}/{dir}")
         os.system(f"mkdir {rig_path}/{dir}/.rig")
@@ -86,11 +89,13 @@ def store(query, dir, quantity=1, value=None):
             temp = get(img).content
             temp = io.BytesIO(temp)
             temp = Image.open(temp)
-            temp.save(f"{dir}/{i}.jpg")   
-            f.write(f"{value},{dir}/{i}.jpg,{query}\n")
+            temp = temp.convert('RGB')
+            temp.save(f"{rig_path}/{dir}/{i}.jpg")  
+            f.write(f"{label},{dir}/{i}.jpg,{query}\n")
         f.close()
 
 def remove(dir, quantity=1, label=None, query=None):
+    quantity = int(quantity)
     if os.path.exists(f"{rig_path}/references.csv"):
         count = 0
         with open(f"{rig_path}/references.csv") as f:
@@ -136,11 +141,11 @@ def remove(dir, quantity=1, label=None, query=None):
             os.system(f"rm -r {rig_path}/{dir}")
 
 def read(dir, ext_file, quantity=1, value=None):
-    with open(ext_file) as f:
+    with open(os.getcwd() + "/" + ext_file) as f:
         lines = f.readlines()
         f.close()
     for line in lines:
-        store(dir, quantity=quantity, value=value, query=line[:-1])
+        store(dir=dir, quantity=quantity, label=value, query=line[:-1])
 
 def track(bucket):
     if os.path.exists(f"{rig_path}/{bucket}") == False:
@@ -158,10 +163,11 @@ def track(bucket):
     print(bucket + " is now being tracked by this directory.")
 
 def untrack():
-    os.system(f"rm -r {rig_path}/{tracking[1]}")
-    for bucket in tracking[0]:
-        os.system(f"rm -r {rig_path}/{bucket}/{tracking[1]}")
-    print("This directory is no longer tracking any buckets.")
+    for file in os.listdir(f'{rig_path}/{args[1]}'):
+        if file[:5] == '.rigs':
+            try: os.system(f"rm -r {rig_path}/{args[1]}/{file}")
+            except: pass
+    print(f"RIG is no longer tracking {args[1]}.")
 
 def install():
     os.system("touch RIG.py")
@@ -175,6 +181,24 @@ import os
 
 rig_path = os.path.dirname(os.path.abspath(__file__))
 dirs = os.listdir(".")
+
+def resize(image, height, grayscale, pad=0):
+    image = np.array(image)
+    if grayscale:
+        image = image.reshape((image.shape[0], image.shape[1], 1))
+    imgh, imgw, c = image.shape
+    #width = int(height/imgh*imgw)
+    width = height
+    image = np.concatenate((image, np.zeros((imgh, int(pad*imgw/imgh), c))), axis=1)
+    image = np.concatenate((image, np.zeros((pad, image.shape[1], c))), axis=0)
+    imgh, imgw, c = image.shape
+    dy = imgh/height
+    dx = imgw/width
+    out = np.zeros((height, width, c)).astype(np.uint8)
+    for i in range(height):
+        for j in range(width):
+            out[i][j] = image[int(i*dy)][int(j*dx)]
+    return out
 
 def pad_to_size(img_array, height, width, grayscale):
     #Takes in and outputs a numpy array
@@ -205,8 +229,6 @@ def trim(img_array, img_w, img_h, grayscale):
         img_array = img_array[:, img_array.shape[1]//2 - img_w//2: img_array.shape[1]//2 + img_w//2]
     return img_array
 
-class Data():
-    def __init__(self, grayscale=False, img_dim=256, shuffle=False):
         with open("{rig_path}/references.csv") as f:
             lines = f.readlines()
             f.close()
@@ -214,29 +236,27 @@ class Data():
         for key in dirs:
             if key[:5] == ".rigs":
                 tracking_key = key
-
         tracked = []
-        for bucket in os.listdir("{rig_path}"):
+        for bucket in os.listdir({rig_path}):
             try:
-                if tracking_key in os.listdir(bucket):
+                if tracking_key in os.listdir("{rig_path}/" + bucket):
                     tracked.append(bucket)
             except: pass
         lines = [line for line in lines if line.split(",")[1].split("/")[0] in tracked]
         if shuffle == True:
             random.shuffle(lines)
+        lines = lines[:quantity]
         self.labels = []
-        self.images = []
         for line in lines:
             line = line.split(",")
             self.labels.append(line[0])
-            line = Image.open(f"{rig_path}/{"{line[1]}"}")
+            line = Image.open(f"{rig_path}/{{line[1]}}")
             if grayscale == True:
                 line = ImageOps.grayscale(line)
-            line = trim(np.array(line), img_dim, img_dim, grayscale)
-            line = pad_to_size(line, img_dim, img_dim, grayscale)
-            if grayscale == True:
-                line = line.reshape((img_dim, img_dim, 1))
-            self.images.append(line/255)''')
+            line = resize(line, img_dim, grayscale)
+            self.images.append(line/255)
+        self.images = np.array(self.images, dtype=np.float32)
+        self.labels = np.array(self.labels, dtype=np.uint8)''')
         f.close()  
 
 p = optparse.OptionParser()
@@ -302,11 +322,14 @@ else:
             remove(dir=args[1], quantity=opt["quantity"], label=opt["label"], query=opt['query'])
         if args[0] == 'track':
             track(args[1])
+        if args[0] == 'read':
+            read(dir=args[1], ext_file=args[2], quantity=opt['quantity'], value=opt['label'])
         if args[0] == 'untrack':
             untrack()
         if args[0] == 'install':
             install()
-    except:
+    except Exception as e:
+        print(e)
         print('Invalid Input. See proper usage instructions by executing the "rig" command.')
     tracking = check_tracking()
     account()
